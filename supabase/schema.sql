@@ -227,3 +227,6 @@ grant  execute on function public.l2_finish_exam(uuid)                      to a
 grant  execute on function public.l2_review(uuid)                           to authenticated;
 grant  execute on function public.l2_question_list()                        to authenticated;
 grant  execute on function public.l2_question_stats()                       to authenticated;
+
+-- ---------- 変更をすぐAPIに反映させる（関数が見つからないエラーの防止） ----------
+notify pgrst, 'reload schema';
