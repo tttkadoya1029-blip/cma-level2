@@ -4,6 +4,6 @@
 window.APP_CONFIG = {
   SUPABASE_URL: "https://jmwshxdrxzvgsswupamx.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_ti06MPxNrF3bIi-KjOVUAQ_DQyuuJ3t",
-  // Googleログインを使わない場合は false に
-  ENABLE_GOOGLE: true
+  // Supabase で Google ログインを有効にしたら true に（それまでは false のままにする）
+  ENABLE_GOOGLE: false
 };

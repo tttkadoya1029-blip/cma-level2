@@ -239,7 +239,7 @@ function renderAuth(){
   $("#sw").addEventListener("click",()=>{S.authMode=signup?"login":"signup";S.authMsg="";renderAuth()});
   $("#g")?.addEventListener("click",async()=>{
     const {error}=await S.sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin+location.pathname}});
-    if(error){S.authMsg="Googleログインを開始できませんでした："+error.message;renderAuth()}
+    if(error){S.authMsg=authErr(error);renderAuth()}
   });
   $("#ef").addEventListener("submit",async e=>{
     e.preventDefault();const btn=$("#esub");btn.disabled=true;
@@ -248,7 +248,7 @@ function renderAuth(){
                     :await S.sb.auth.signInWithPassword({email,password});
     btn.disabled=false;
     if(res.error){S.authMsg=authErr(res.error);renderAuth();return}
-    if(signup&&!res.data.session){S.authMsg="✓確認メールを送りました。メール内のリンクを押すと登録が完了します。";S.authMode="login";renderAuth()}
+    if(signup&&!res.data.session){S.authMsg="✓確認メールを送りました。メール内のリンクを押すと登録が完了します。届かない場合は迷惑メールフォルダを確認するか、講師に連絡してください。";S.authMode="login";renderAuth()}
   });
 }
 function authErr(e){
@@ -257,6 +257,7 @@ function authErr(e){
   if(/already registered/i.test(m))return "このメールアドレスは登録済みです。ログインしてください。";
   if(/Email not confirmed/i.test(m))return "メールアドレスの確認がまだです。届いたメールのリンクを押してください。";
   if(/rate limit/i.test(m))return "短時間に操作が集中しました。しばらく待ってからお試しください。";
+  if(/provider is not enabled|Unsupported provider/i.test(m))return "このログイン方法はまだ使えません。メールアドレスで登録してください。";
   return "ログインできませんでした："+m;
 }
 function renderWho(){
