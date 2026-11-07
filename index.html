@@ -97,12 +97,14 @@ label.f small{font-size:12px}
 .progress{height:4px;background:var(--rule);border-radius:2px;overflow:hidden}
 .progress i{display:block;height:100%;background:var(--accent);transition:width .3s}
 .stem{font-size:18px;line-height:1.85;font-weight:500}
-.marks{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.marks{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 .mark{font:inherit;border:2px solid var(--rule);background:var(--sheet);border-radius:10px;padding:16px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--ink);touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .mark .sym{font-size:44px;line-height:1;font-weight:900}
 .mark .lb{font-size:13px;color:var(--ink-2)}
 @media (hover:hover){.mark.m:hover:not(:disabled){border-color:var(--maru);background:var(--maru-soft)}.mark.b:hover:not(:disabled){border-color:var(--batsu);background:var(--batsu-soft)}}
-.mark.m .sym{color:var(--maru)} .mark.b .sym{color:var(--batsu)}
+.mark.m .sym{color:var(--maru)} .mark.b .sym{color:var(--batsu)} .mark.u .sym{color:var(--ink-2);font-size:36px}
+.mark.u .lb{white-space:nowrap}
+@media (hover:hover){.mark.u:hover:not(:disabled){border-color:var(--ink-2);background:var(--paper)}}
 .mark:disabled{cursor:default;opacity:.6}
 .confirm{border:1px solid var(--batsu);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;background:var(--batsu-soft)}
 /* 縦積みリスト */
@@ -110,9 +112,11 @@ label.f small{font-size:12px}
 .li{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;padding:12px 14px;border-bottom:1px solid var(--rule);align-items:start;min-width:0}
 .li:last-child{border-bottom:0}
 .li .mk{font-size:20px;font-weight:900;line-height:1.3;min-width:24px;text-align:center}
-.li .mk.ok{color:var(--maru)} .li .mk.ng{color:var(--batsu)} .li .mk.na{color:var(--ink-2);font-size:14px}
+.li .mk.ok{color:var(--maru)} .li .mk.ng{color:var(--batsu)} .li .mk.un{color:var(--ink-2)} .li .mk.na{color:var(--ink-2);font-size:14px}
 .li .body{min-width:0;display:flex;flex-direction:column;gap:4px;font-size:14px}
-.li .body>.subj,.li .body>.hard{align-self:flex-start}
+.li .body>.subj,.li .body>.hard,.li .body>.tag-k{align-self:flex-start}
+.tag-k{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:4px;background:var(--paper);color:var(--ink-2)}
+.tag-k.ng{background:var(--batsu-soft);color:var(--batsu)}
 .li .side{font-family:var(--f-mono);font-size:13px;color:var(--ink-2);text-align:right;white-space:nowrap}
 .li.click{cursor:pointer}
 @media (hover:hover){.li.click:hover{background:var(--accent-soft)}}
@@ -139,7 +143,7 @@ th.first,td.first{position:sticky;left:0;background:var(--sheet);z-index:1} th.f
 .switch{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);cursor:pointer}
 .switch input{width:18px;height:18px}
 details summary{cursor:pointer;color:var(--ink-2);font-size:13px}
-@media (max-width:480px){.sheet{padding:16px}.stem{font-size:17px}.mark .sym{font-size:40px}h1{font-size:20px}}
+@media (max-width:480px){.sheet{padding:16px}.stem{font-size:17px}.mark{padding:14px 4px}.mark .sym{font-size:38px}.mark.u .sym{font-size:32px}.mark .lb{font-size:12px}h1{font-size:20px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -165,7 +169,7 @@ const OUTLIER_MS=300000; // 5分超は離席とみなし時間の集計から除
 const SUBJECTS=[{name:"市場と経済の分析",short:"経済",cls:"eco"},{name:"コーポレート・ファイナンス",short:"CF",cls:"cf"},{name:"財務分析",short:"財務",cls:"fa"}];
 const subjCls=n=>SUBJECTS.find(s=>s.name===n)?.cls||"eco";
 const S={sb:null,session:null,member:null,qlist:[],QMAP:{},qstats:{},myExams:[],myAnswers:[],
-  view:"home",pick:{subject:null,hard:false,count:20},exam:null,result:null,review:null,error:"",authMode:"login",authMsg:"",
+  view:"home",pick:{subject:null,count:20},exam:null,result:null,review:null,error:"",authMode:"login",authMsg:"",
   teacherData:null,teacherLoading:false,sample:false,student:null,editProfile:false};
 const $=s=>document.querySelector(s), app=$("#app");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -180,6 +184,9 @@ const totalT=ms=>ms<60000?`${Math.round(ms/1000)}<small> 秒</small>`:`${Math.fl
 const fmtDate=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`};
 const isTeacher=()=>S.member?.role==="teacher";
 const subjTag=n=>`<span class="subj ${subjCls(n)}">${esc(n)}</span>`;
+const choiceLabel=c=>c===true?"○":c===false?"×":"わからない";
+const unsure=list=>list.length?list.filter(a=>a.choice==null).length/list.length:null;
+const markOf=r=>r.correct?`<span class="mk ok">○</span>`:r.choice==null?`<span class="mk un" title="わからない">？</span>`:`<span class="mk ng">×</span>`;
 const hardTag=l=>l==="難問"?`<span class="hard">難問</span>`:"";
 const accBar=x=>`<div class="bar-cell"><span class="minibar"><i style="width:${Math.round((x||0)*100)}%"></i></span><span style="font-family:var(--f-mono)">${pct(x)}</span></div>`;
 
@@ -216,7 +223,7 @@ async function loadMine(){
 }
 async function loadStats(){
   const {data}=await S.sb.rpc("l2_question_stats");
-  S.qstats=Object.fromEntries((data||[]).map(r=>[r.question_id,{n:+r.n,acc:+r.accuracy,med:r.median_ms==null?null:+r.median_ms}]));
+  S.qstats=Object.fromEntries((data||[]).map(r=>[r.question_id,{n:+r.n,acc:+r.accuracy,med:r.median_ms==null?null:+r.median_ms,unsure:r.unsure_rate==null?null:+r.unsure_rate}]));
 }
 const toAns=r=>({eid:r.exam_id,qid:r.question_id,choice:r.choice,correct:r.is_correct,ms:r.time_ms,at:new Date(r.answered_at).getTime(),uid:r.user_id});
 async function fetchAll(build){
@@ -333,39 +340,35 @@ function renderProfile(){
 }
 
 /* ===== 挑戦する（開始画面） ===== */
-function poolFor(subject,hard){return S.qlist.filter(q=>(!subject||q.subject===subject)&&(hard||q.level==="標準"))}
+function poolFor(subject){return S.qlist.filter(q=>!subject||q.subject===subject)}
 const PRESETS=[10,20,30,50];
-const examCount=()=>{const pool=poolFor(S.pick.subject,S.pick.hard).length;return S.pick.count==null?pool:Math.min(S.pick.count,pool)};
+const examCount=()=>{const pool=poolFor(S.pick.subject).length;return S.pick.count==null?pool:Math.min(S.pick.count,pool)};
 function renderHome(){
-  const p=S.pick,pool=poolFor(p.subject,p.hard),nHard=pool.filter(q=>q.level==="難問").length,nStd=pool.length-nHard;
-  const hardAvail=poolFor(p.subject,true).filter(q=>q.level==="難問").length;
+  const p=S.pick,pool=poolFor(p.subject);
   const myMed=medT(S.myAnswers)||40000;
-  const cnt=s=>poolFor(s,p.hard).length;
+  const cnt=s=>poolFor(s).length;
   const n=examCount(),isPreset=p.count==null||PRESETS.includes(p.count);
   app.innerHTML=`<section class="sheet">
     <h1>本番モードで挑戦</h1>
-    <p class="muted">1問ごとに解答時間を計り、正誤と解説は最後にまとめて表示します。途中でやめて、そこまでを採点することもできます。</p>
+    <p class="muted">1問ごとに解答時間を計り、正誤と解説は最後にまとめて表示します。解答は「○」「×」「わからない」の3択です。途中でやめて、そこまでを採点することもできます。</p>
     ${S.error?`<div class="note">${esc(S.error)}</div>`:""}
     <h3>科目を選ぶ</h3>
     <div class="seg four" role="group" aria-label="科目">
       <button data-subj="" aria-pressed="${!p.subject}">すべての科目<small>${cnt(null)}問</small></button>
       ${SUBJECTS.map(s=>`<button data-subj="${esc(s.name)}" aria-pressed="${p.subject===s.name}">${esc(s.name)}<small>${cnt(s.name)}問</small></button>`).join("")}
     </div>
-    <label class="toggle"><input type="checkbox" id="hard" ${p.hard?"checked":""}>
-      <span class="t"><b>難問にも挑戦する</b><span class="muted">計算問題や細かい論点を含む難しめの問題を ${hardAvail}問 追加します</span></span></label>
     <h3>問題数を選ぶ</h3>
     <div class="seg five" role="group" aria-label="問題数">
       ${PRESETS.map(k=>`<button data-count="${k}" aria-pressed="${p.count===k}" ${k>pool.length?"disabled":""}>${k}問</button>`).join("")}
       <button data-count="all" aria-pressed="${p.count==null}">すべて<small>${pool.length}問</small></button>
     </div>
     <label class="custom"><span>自由に指定</span><input type="number" id="cnum" inputmode="numeric" min="1" max="${pool.length}" step="1" value="${isPreset?"":p.count}" placeholder="例 15"><span>問（1〜${pool.length}問）</span></label>
-    <div class="summary"><span>出題 <b>${n}</b>問</span><span>${n<pool.length?`${pool.length}問（標準${nStd}${p.hard?`・難問${nHard}`:""}）から抽選`:`標準${nStd}問${p.hard?`・難問${nHard}問`:""}`}</span><span>目安 約<b>${Math.max(1,Math.round(n*myMed/60000))}</b>分</span></div>
+    <div class="summary"><span>出題 <b>${n}</b>問</span><span>${n<pool.length?`${pool.length}問から抽選`:`範囲内の全問`}</span><span>目安 約<b>${Math.max(1,Math.round(n*myMed/60000))}</b>分</span></div>
     <button class="btn accent wide" id="start" ${n?"":"disabled"}>${n}問で開始する</button>
   </section>
   ${S.myExams.length?`<section class="sheet"><div class="row between"><h2>最近の結果</h2><button class="linkbtn" id="more">すべて見る</button></div>
     <div class="list">${S.myExams.slice(0,3).map(examRow).join("")}</div></section>`:""}`;
   document.querySelectorAll("[data-subj]").forEach(b=>b.addEventListener("click",()=>{S.pick.subject=b.dataset.subj||null;renderHome()}));
-  $("#hard").addEventListener("change",e=>{S.pick.hard=e.target.checked;renderHome()});
   document.querySelectorAll("[data-count]").forEach(b=>b.addEventListener("click",()=>{S.pick.count=b.dataset.count==="all"?null:+b.dataset.count;renderHome()}));
   $("#cnum").addEventListener("change",e=>{const v=Math.floor(+e.target.value);if(v>=1){S.pick.count=Math.min(v,pool.length)}renderHome()});
   $("#start").addEventListener("click",startExam);
@@ -375,7 +378,7 @@ function renderHome(){
 function examRow(e){
   const a=S.myAnswers.filter(x=>x.eid===e.id),c=a.filter(x=>x.correct).length;
   return `<div class="li click" tabindex="0" data-exam="${esc(e.id)}"><span class="rank">${a.length?Math.round(c/a.length*100):"—"}<small style="font-size:11px">%</small></span>
-    <div class="body"><div class="tags">${e.subject?subjTag(e.subject):`<span class="muted">全科目</span>`}${e.include_hard?`<span class="hard">難問あり</span>`:""}</div>
+    <div class="body"><div class="tags">${e.subject?subjTag(e.subject):`<span class="muted">全科目</span>`}</div>
     <div class="kv"><span>${fmtDate(e.started_at)}</span><span>${e.question_count}問</span><span>正解 <b>${c}/${a.length}</b>${a.length<e.question_count?`（途中終了）`:""}</span><span>時間 <b>${sec(medT(a))}</b></span></div></div>
     <span class="side">›</span></div>`;
 }
@@ -387,7 +390,7 @@ function bindExamRows(){
 let tick=null;
 async function startExam(){
   $("#start").disabled=true;S.error="";
-  const {data,error}=await S.sb.rpc("l2_start_exam",{p_subject:S.pick.subject,p_include_hard:S.pick.hard,p_limit:S.pick.count});
+  const {data,error}=await S.sb.rpc("l2_start_exam",{p_subject:S.pick.subject,p_include_hard:true,p_limit:S.pick.count});
   if(error||!data?.length){S.error="開始できませんでした："+(error?.message||"問題がありません");render();return}
   S.exam={id:data[0].exam_id,qs:data,i:0,answers:[],queue:Promise.resolve(),failed:[],paused:0,hiddenAt:null,t0:0,locked:false,confirm:false};
   S.result=null;render();showQ();window.scrollTo(0,0);
@@ -404,12 +407,13 @@ function renderExam(){
   app.innerHTML=`<section class="sheet">
     <div class="qmeta"><span class="l"><span class="qno">${x.i+1} / ${x.qs.length}</span>${subjTag(q.subject)}</span>
       <span class="timer" id="tm" aria-label="経過時間">0.0</span></div>
-    <div class="unit">${hardTag(q.level)}<span>${esc(q.unit)}</span></div>
+    <div class="unit"><span>${esc(q.unit)}</span></div>
     <div class="progress"><i style="width:${(x.i/x.qs.length)*100}%"></i></div>
     <p class="stem">${esc(q.stem)}</p>
     <div class="marks">
       <button class="mark m" id="ans-true"><span class="sym">○</span><span class="lb">正しい</span></button>
       <button class="mark b" id="ans-false"><span class="sym">×</span><span class="lb">誤り</span></button>
+      <button class="mark u" id="ans-unsure"><span class="sym">？</span><span class="lb">わからない</span></button>
     </div>
     ${x.failed.length?`<div class="note">${x.failed.length}問分の記録を送信できていません。通信が戻ると自動で再送します。</div>`:""}
     ${x.confirm?`<div class="confirm"><b>ここで終了して採点しますか？</b><span class="muted">解答済みの ${x.answers.length}問だけを採点します。この問題は記録されません。</span>
@@ -418,6 +422,7 @@ function renderExam(){
   </section>`;
   $("#ans-true").addEventListener("click",()=>answer(true));
   $("#ans-false").addEventListener("click",()=>answer(false));
+  $("#ans-unsure").addEventListener("click",()=>answer(null));
   $("#stop")?.addEventListener("click",()=>{x.confirm=true;const t=$("#tm").textContent;renderExam();$("#tm").textContent=t});
   $("#stopNo")?.addEventListener("click",()=>{x.confirm=false;const t=$("#tm").textContent;renderExam();$("#tm").textContent=t});
   $("#stopYes")?.addEventListener("click",finishExam);
@@ -450,7 +455,7 @@ async function finishExam(){
   }
   const {data,error}=await S.sb.rpc("l2_finish_exam",{p_exam:x.id});
   if(error){app.innerHTML=`<section class="sheet"><h2>採点できませんでした</h2><p class="muted">${esc(error.message)}</p><button class="btn accent" id="retry">もう一度</button></section>`;$("#retry").addEventListener("click",finishExam);return}
-  S.result={examId:x.id,subject:S.pick.subject,hard:S.pick.hard,count:S.pick.count,total:x.qs.length,rows:data.map(r=>({qid:r.question_id,choice:r.choice,correct:r.is_correct,ms:r.time_ms,answer:r.answer,exp:r.explanation})),filter:"all",fromHistory:false};
+  S.result={examId:x.id,subject:S.pick.subject,count:S.pick.count,total:x.qs.length,rows:data.map(r=>({qid:r.question_id,choice:r.choice,correct:r.is_correct,ms:r.time_ms,answer:r.answer,exp:r.explanation})),filter:"all",fromHistory:false};
   S.exam=null;
   await Promise.all([loadMine(),loadStats()]);S.teacherData=null;
   render();window.scrollTo(0,0);
@@ -462,7 +467,7 @@ async function openReview(examId){
   app.innerHTML=`<section class="sheet"><h2>読み込んでいます…</h2></section>`;
   const {data,error}=await S.sb.rpc("l2_review",{p_exam:examId});
   if(error){S.error="結果を読み込めませんでした："+error.message;render();return}
-  S.result={examId,subject:e?.subject,hard:e?.include_hard,total:e?.question_count||data.length,startedAt:e?.started_at,
+  S.result={examId,subject:e?.subject,total:e?.question_count||data.length,startedAt:e?.started_at,
     rows:data.map(r=>({qid:r.question_id,choice:r.choice,correct:r.is_correct,ms:r.time_ms,answer:r.answer,exp:r.explanation})),filter:"all",fromHistory:true};
   render();window.scrollTo(0,0);
 }
@@ -471,32 +476,32 @@ function breakdown(rows,key){
 }
 function renderResult(){
   const R=S.result,rows=R.rows,score=rows.filter(r=>r.correct).length;
-  const bySubj=breakdown(rows,r=>S.QMAP[r.qid]?.subject),byLv=breakdown(rows,r=>S.QMAP[r.qid]?.level);
+  const bySubj=breakdown(rows,r=>S.QMAP[r.qid]?.subject);
   const shown=R.filter==="wrong"?rows.filter(r=>!r.correct):rows;
   app.innerHTML=`<section class="sheet">
-    <div class="tags">${R.subject?subjTag(R.subject):`<span class="muted">全科目</span>`}${R.hard?`<span class="hard">難問あり</span>`:""}${R.startedAt?`<span class="muted">${fmtDate(R.startedAt)}</span>`:""}</div>
+    <div class="tags">${R.subject?subjTag(R.subject):`<span class="muted">全科目</span>`}${R.startedAt?`<span class="muted">${fmtDate(R.startedAt)}</span>`:""}</div>
     <h1>${score} / ${rows.length} 問正解${rows.length<R.total?`<span class="muted" style="font-size:14px;font-weight:400">（${R.total}問中 ${rows.length}問に解答）</span>`:""}</h1>
     <div class="stats">
       <div class="stat"><div class="k">正答率</div><div class="v">${pct(rows.length?score/rows.length:null)}</div></div>
+      <div class="stat"><div class="k">わからない</div><div class="v">${rows.filter(r=>r.choice==null).length}<small> 問</small></div></div>
       <div class="stat"><div class="k">時間（中央値）</div><div class="v">${sec(medT(rows)).replace("秒","")}<small> 秒</small></div></div>
       <div class="stat"><div class="k">合計時間</div><div class="v">${totalT(rows.reduce((a,b)=>a+b.ms,0))}</div></div>
     </div>
     <h3>科目別</h3>
-    <div class="list">${SUBJECTS.filter(s=>bySubj[s.name]).map(s=>{const a=bySubj[s.name];return `<div class="li"><span class="mk na"></span><div class="body">${subjTag(s.name)}<div class="kv"><span>正答率 <b>${pct(acc(a))}</b></span><span>時間 <b>${sec(medT(a))}</b></span></div></div><span class="side">${a.filter(x=>x.correct).length}/${a.length}</span></div>`}).join("")}</div>
-    ${byLv["難問"]?`<h3>難易度別</h3><div class="list">${["標準","難問"].filter(l=>byLv[l]).map(l=>{const a=byLv[l];return `<div class="li"><span class="mk na"></span><div class="body"><span>${l==="難問"?hardTag(l):"標準"}</span><div class="kv"><span>正答率 <b>${pct(acc(a))}</b></span><span>時間 <b>${sec(medT(a))}</b></span></div></div><span class="side">${a.filter(x=>x.correct).length}/${a.length}</span></div>`}).join("")}</div>`:""}
+    <div class="list">${SUBJECTS.filter(s=>bySubj[s.name]).map(s=>{const a=bySubj[s.name];return `<div class="li"><span class="mk na"></span><div class="body">${subjTag(s.name)}<div class="kv"><span>正答率 <b>${pct(acc(a))}</b></span><span>わからない <b>${pct(unsure(a))}</b></span><span>時間 <b>${sec(medT(a))}</b></span></div></div><span class="side">${a.filter(x=>x.correct).length}/${a.length}</span></div>`}).join("")}</div>
     <div class="row">${R.fromHistory?`<button class="btn ghost" id="back">記録に戻る</button>`:`<button class="btn ghost" id="home">トップへ</button>`}<button class="btn accent" id="again">同じ条件でもう一度</button></div>
   </section>
   <section class="sheet"><div class="row between"><h2>問題ごとの結果</h2>
-    <div class="seg" role="group" style="min-width:220px"><button data-f="all" aria-pressed="${R.filter==="all"}">すべて</button><button data-f="wrong" aria-pressed="${R.filter==="wrong"}">間違いのみ</button></div></div>
-    ${shown.length?`<div class="list">${shown.map(r=>{const q=S.QMAP[r.qid]||{},st=S.qstats[r.qid];return `<div class="li"><span class="mk ${r.correct?"ok":"ng"}">${r.correct?"○":"×"}</span>
-      <div class="body"><div class="tags">${subjTag(q.subject)}${hardTag(q.level)}</div><span class="muted">${esc(q.unit)}・${esc(q.point_code)} ${esc(q.point_title)}</span><span>${esc(q.stem)}</span>
-        <details ${r.correct?"":"open"}><summary>正答 ${r.answer?"○":"×"}／あなた ${r.choice?"○":"×"}　解説</summary><p style="margin-top:4px;font-size:14px">${esc(r.exp)}</p></details>
-        <div class="kv"><span>みんなの正答率 <b>${pct(st?.acc)}</b></span><span>みんなの時間 <b>${sec(st?.med)}</b></span></div></div>
-      <span class="side">${sec(r.ms)}</span></div>`}).join("")}</div>`:`<div class="empty">間違えた問題はありません。</div>`}
+    <div class="seg" role="group" style="min-width:260px"><button data-f="all" aria-pressed="${R.filter==="all"}">すべて</button><button data-f="wrong" aria-pressed="${R.filter==="wrong"}">間違い・わからない</button></div></div>
+    ${shown.length?`<div class="list">${shown.map(r=>{const q=S.QMAP[r.qid]||{},st=S.qstats[r.qid];return `<div class="li">${markOf(r)}
+      <div class="body"><div class="tags">${subjTag(q.subject)}</div><span class="muted">${esc(q.unit)}・${esc(q.point_code)} ${esc(q.point_title)}</span><span>${esc(q.stem)}</span>
+        <details ${r.correct?"":"open"}><summary>正答 ${r.answer?"○":"×"}／あなた ${choiceLabel(r.choice)}　解説</summary><p style="margin-top:4px;font-size:14px">${esc(r.exp)}</p></details>
+        <div class="kv"><span>みんなの正答率 <b>${pct(st?.acc)}</b></span><span>みんなの「わからない」 <b>${pct(st?.unsure)}</b></span><span>みんなの時間 <b>${sec(st?.med)}</b></span></div></div>
+      <span class="side">${sec(r.ms)}</span></div>`}).join("")}</div>`:`<div class="empty">間違えた問題・わからなかった問題はありません。</div>`}
   </section>`;
   $("#home")?.addEventListener("click",()=>{S.result=null;setTab("home");render();window.scrollTo(0,0)});
   $("#back")?.addEventListener("click",()=>{S.result=null;render();window.scrollTo(0,0)});
-  $("#again").addEventListener("click",()=>{S.pick={subject:R.subject||null,hard:!!R.hard,count:R.count!==undefined?R.count:R.total};S.result=null;setTab("home");render();startExam()});
+  $("#again").addEventListener("click",()=>{S.pick={subject:R.subject||null,count:R.count!==undefined?R.count:R.total};S.result=null;setTab("home");render();startExam()});
   document.querySelectorAll("[data-f]").forEach(b=>b.addEventListener("click",()=>{S.result.filter=b.dataset.f;renderResult()}));
 }
 
@@ -509,22 +514,23 @@ function renderHistory(){
     ${A.length?`<div class="stats">
       <div class="stat"><div class="k">解答数</div><div class="v">${A.length}<small> 問</small></div></div>
       <div class="stat"><div class="k">正答率</div><div class="v">${pct(acc(A))}</div></div>
+      <div class="stat"><div class="k">わからない</div><div class="v">${pct(unsure(A))}</div></div>
       <div class="stat"><div class="k">時間（中央値）</div><div class="v">${sec(medT(A)).replace("秒","")}<small> 秒</small></div></div>
       <div class="stat"><div class="k">挑戦回数</div><div class="v">${S.myExams.length}<small> 回</small></div></div></div>
     <h3>科目別（あなた／みんな）</h3>
     <div class="list">${SUBJECTS.map(s=>{const a=A.filter(x=>S.QMAP[x.qid]?.subject===s.name);const all=allStats(q=>q.subject===s.name);return `<div class="li"><span class="mk na"></span><div class="body">${subjTag(s.name)}
-      <div class="kv"><span>正答率 <b>${pct(acc(a))}</b> / ${pct(all.acc)}</span><span>時間 <b>${sec(medT(a))}</b> / ${sec(all.med)}</span></div></div><span class="side">${a.length}問</span></div>`}).join("")}</div>
+      <div class="kv"><span>正答率 <b>${pct(acc(a))}</b> / ${pct(all.acc)}</span><span>わからない <b>${pct(unsure(a))}</b> / ${pct(all.unsure)}</span><span>時間 <b>${sec(medT(a))}</b> / ${sec(all.med)}</span></div></div><span class="side">${a.length}問</span></div>`}).join("")}</div>
     ${weak.length?`<h3>苦手な学習ポイント（正答率60%未満）</h3><div class="list">${weak.map(p=>`<div class="li"><span class="mk ng">!</span><div class="body"><div class="tags">${subjTag(p.q.subject)}</div><b>${esc(p.q.point_code)} ${esc(p.q.point_title)}</b><span class="muted">${esc(p.q.unit)}</span></div><span class="side">${pct(p.acc)}<br>${p.list.length}問</span></div>`).join("")}</div>`:""}
-    <p class="muted">時間はすべて中央値です。5分を超えた解答は離席とみなして時間の集計から除いています。</p>`
+    <p class="muted">「わからない」は不正解として採点しています。時間はすべて中央値で、5分を超えた解答は離席とみなして時間の集計から除いています。</p>`
     :`<div class="empty">まだ記録がありません。「挑戦する」から始めましょう。</div>`}
   </section>
   ${S.myExams.length?`<section class="sheet"><h2>挑戦の履歴</h2><p class="muted">押すと問題ごとの結果と解説を見られます。</p><div class="list">${S.myExams.map(examRow).join("")}</div></section>`:""}`;
   bindExamRows();
 }
 function allStats(filter){ // 問題ごとの集計値から、みんなの正答率と時間（解答数で重みづけ）を出す
-  let n=0,c=0;const meds=[];
-  S.qlist.filter(filter).forEach(q=>{const s=S.qstats[q.id];if(!s)return;n+=s.n;c+=s.acc*s.n;if(s.med!=null)meds.push(s.med)});
-  return {acc:n?c/n:null,med:median(meds)};
+  let n=0,c=0,u=0;const meds=[];
+  S.qlist.filter(filter).forEach(q=>{const s=S.qstats[q.id];if(!s)return;n+=s.n;c+=s.acc*s.n;u+=(s.unsure||0)*s.n;if(s.med!=null)meds.push(s.med)});
+  return {acc:n?c/n:null,unsure:n?u/n:null,med:median(meds)};
 }
 
 /* ===== 講師用 分析 ===== */
@@ -546,18 +552,18 @@ function sampleData(){ // 画面確認用の架空データ（保存しない）
   const skill=[.85,.7,.6,.5,.75],speed=[25,35,30,50,20],bias=[{},{"財務分析":-.2},{"市場と経済の分析":-.25},{},{"コーポレート・ファイナンス":-.2}];
   const members=names.map((n,k)=>({id:"s"+k,nickname:n[0],full_name:n[1],email:`sample${k+1}@example.com`,role:"student",created_at:new Date().toISOString()}));
   const answers=[];
-  members.forEach((m,k)=>S.qlist.forEach(q=>{if(q.level==="難問"&&k%2)return;const p=Math.max(.1,Math.min(.97,skill[k]+(bias[k][q.subject]||0)-(q.level==="難問"?.15:0)));
-    answers.push({uid:m.id,eid:"e"+k,qid:q.id,correct:rnd()<p,ms:Math.round((speed[k]+rnd()*25)*(q.level==="難問"?1.5:1)*1000)})}));
+  members.forEach((m,k)=>S.qlist.forEach(q=>{const p=Math.max(.1,Math.min(.97,skill[k]+(bias[k][q.subject]||0)-(q.level==="難問"?.15:0)));
+    const r=rnd(),ok=r<p,un=!ok&&rnd()<.35;answers.push({uid:m.id,eid:"e"+k,qid:q.id,correct:ok,choice:ok?true:un?null:false,ms:Math.round((speed[k]+rnd()*25)*(q.level==="難問"?1.5:1)*1000)})}));
   return {members,exams:members.map((m,k)=>({id:"e"+k,user_id:m.id})),answers};
 }
 function teacherModel(TD){
   const by={};TD.answers.forEach(a=>{(by[a.uid]=by[a.uid]||[]).push(a)});
   const st=TD.members.map(m=>({m,ans:by[m.id]||[],exams:TD.exams.filter(e=>e.user_id===m.id).length})).filter(s=>s.ans.length);
-  st.forEach(s=>{s.acc=acc(s.ans);s.t=medT(s.ans);s.subj=SUBJECTS.map(x=>{const a=s.ans.filter(y=>S.QMAP[y.qid]?.subject===x.name);return {name:x.name,n:a.length,acc:acc(a),t:medT(a)}})});
+  st.forEach(s=>{s.acc=acc(s.ans);s.un=unsure(s.ans);s.t=medT(s.ans);s.subj=SUBJECTS.map(x=>{const a=s.ans.filter(y=>S.QMAP[y.qid]?.subject===x.name);return {name:x.name,n:a.length,acc:acc(a),un:unsure(a),t:medT(a)}})});
   const accs=st.map(s=>s.acc),mu=mean(accs),sg=sd(accs);
   st.forEach(s=>{s.dev=sg>0?50+10*(s.acc-mu)/sg:50});st.sort((a,b)=>b.dev-a.dev);
-  const qs=S.qlist.map(q=>{const a=TD.answers.filter(x=>x.qid===q.id);return {q,n:a.length,acc:acc(a),t:medT(a)}});
-  const subjAll=SUBJECTS.map(x=>{const a=TD.answers.filter(y=>S.QMAP[y.qid]?.subject===x.name);return {name:x.name,acc:acc(a),t:medT(a)}});
+  const qs=S.qlist.map(q=>{const a=TD.answers.filter(x=>x.qid===q.id);return {q,n:a.length,acc:acc(a),un:unsure(a),t:medT(a)}});
+  const subjAll=SUBJECTS.map(x=>{const a=TD.answers.filter(y=>S.QMAP[y.qid]?.subject===x.name);return {name:x.name,acc:acc(a),un:unsure(a),t:medT(a)}});
   return {st,qs,subjAll,all:TD.answers,classAcc:mu};
 }
 function renderTeacher(){
@@ -584,15 +590,15 @@ function renderTeacher(){
     <p class="muted">偏差値は全員の正答率から算出（50＋10×（本人−平均）÷標準偏差）。時間は中央値。押すと個別の分析を表示します。</p>
     <div class="list">${M.st.map(s=>`<div class="li click" tabindex="0" data-uid="${esc(s.m.id)}"><span class="rank">${s.dev.toFixed(0)}</span>
       <div class="body"><b>${esc(s.m.nickname)}<span class="muted" style="font-weight:400">（${esc(s.m.full_name)}）</span></b><span class="muted">${esc(s.m.email)}</span>
-      <div class="kv"><span>正答率 <b>${pct(s.acc)}</b></span><span>時間 <b>${sec(s.t)}</b></span><span><b>${s.ans.length}</b>問・${s.exams}回</span></div></div><span class="side">偏差値</span></div>`).join("")}</div></section>
-  <section class="sheet"><h2>科目 × 受講者</h2><p class="muted">正答率・時間（中央値）。表は横にスクロールできます。</p>
+      <div class="kv"><span>正答率 <b>${pct(s.acc)}</b></span><span>わからない <b>${pct(s.un)}</b></span><span>時間 <b>${sec(s.t)}</b></span><span><b>${s.ans.length}</b>問・${s.exams}回</span></div></div><span class="side">偏差値</span></div>`).join("")}</div></section>
+  <section class="sheet"><h2>科目 × 受講者</h2><p class="muted">正答率・「わからない」の割合・時間（中央値）。表は横にスクロールできます。</p>
     <div class="tbl"><table><thead><tr><th class="first">受講者</th>${SUBJECTS.map(s=>`<th>${esc(s.name)}</th>`).join("")}</tr></thead>
-    <tbody>${M.st.map(s=>`<tr><td class="first">${esc(s.m.nickname)}</td>${s.subj.map(x=>`<td>${x.n?`${accBar(x.acc)}<span class="muted">${sec(x.t)}・${x.n}問</span>`:"—"}</td>`).join("")}</tr>`).join("")}
-    <tr><td class="first"><b>全体</b></td>${M.subjAll.map(x=>`<td>${accBar(x.acc)}<span class="muted">${sec(x.t)}</span></td>`).join("")}</tr></tbody></table></div></section>
+    <tbody>${M.st.map(s=>`<tr><td class="first">${esc(s.m.nickname)}</td>${s.subj.map(x=>`<td>${x.n?`${accBar(x.acc)}<span class="muted">わからない${pct(x.un)}・${sec(x.t)}・${x.n}問</span>`:"—"}</td>`).join("")}</tr>`).join("")}
+    <tr><td class="first"><b>全体</b></td>${M.subjAll.map(x=>`<td>${accBar(x.acc)}<span class="muted">わからない${pct(x.un)}・${sec(x.t)}</span></td>`).join("")}</tr></tbody></table></div></section>
   <section class="sheet"><h2>問題別（正答率が低い順）</h2>
     <div class="list">${[...M.qs].filter(x=>x.n).sort((a,b)=>a.acc-b.acc).map(x=>`<div class="li"><span class="mk na" style="font-family:var(--f-mono);font-size:12px">${esc(x.q.id)}</span>
       <div class="body"><div class="tags">${subjTag(x.q.subject)}${hardTag(x.q.level)}</div><span>${esc(x.q.stem)}</span>
-      <div class="kv"><span>正答率 <b>${pct(x.acc)}</b></span><span>時間 <b>${sec(x.t)}</b></span><span><b>${x.n}</b>件</span></div></div><span></span></div>`).join("")}</div></section>`:""}`;
+      <div class="kv"><span>正答率 <b>${pct(x.acc)}</b></span><span>わからない <b>${pct(x.un)}</b></span><span>時間 <b>${sec(x.t)}</b></span><span><b>${x.n}</b>件</span></div></div><span></span></div>`).join("")}</div></section>`:""}`;
   $("#smp").addEventListener("change",e=>{S.sample=e.target.checked;render()});
   $("#rl").addEventListener("click",async()=>{S.teacherData=null;S.sample=false;await loadStats();render()});
   $("#csv")?.addEventListener("click",()=>downloadCsv(TD));
@@ -600,8 +606,8 @@ function renderTeacher(){
 }
 function renderStudent(s,M){
   const pts={};s.ans.forEach(a=>{const q=S.QMAP[a.qid];if(!q)return;(pts[q.point_code]=pts[q.point_code]||{q,list:[]}).list.push(a)});
-  const weak=Object.values(pts).map(p=>({...p,acc:acc(p.list),t:medT(p.list)})).sort((a,b)=>a.acc-b.acc||(b.t||0)-(a.t||0)).slice(0,10);
-  const lv=l=>s.ans.filter(a=>S.QMAP[a.qid]?.level===l);
+  const weak=Object.values(pts).map(p=>({...p,acc:acc(p.list),un:unsure(p.list),t:medT(p.list)})).sort((a,b)=>a.acc-b.acc||(b.t||0)-(a.t||0)).slice(0,10);
+  const kind=p=>p.acc>=0.6?"":p.un>=0.5?`<span class="tag-k">知識不足（わからないが多い）</span>`:`<span class="tag-k ng">思い違い（×が多い）</span>`;
   app.innerHTML=`<section class="sheet">
     <div class="row"><button class="btn ghost small" id="back">← 一覧へ戻る</button></div>
     <h1>${esc(s.m.nickname)} さん</h1><p class="muted">${esc(s.m.full_name)}・${esc(s.m.email)}</p>
@@ -610,11 +616,11 @@ function renderStudent(s,M){
       <div class="stat"><div class="k">偏差値</div><div class="v">${s.dev.toFixed(1)}</div></div>
       <div class="stat"><div class="k">正答率（全体）</div><div class="v">${pct(s.acc)}<small> ${pct(M.classAcc)}</small></div></div>
       <div class="stat"><div class="k">時間（中央値）</div><div class="v">${sec(s.t).replace("秒","")}<small> 秒</small></div></div>
-      <div class="stat"><div class="k">難問の正答率</div><div class="v">${pct(acc(lv("難問")))}<small> ${lv("難問").length}問</small></div></div></div></section>
+      <div class="stat"><div class="k">わからない</div><div class="v">${pct(s.un)}</div></div></div></section>
   <section class="sheet"><h2>科目別（本人／全体）</h2>
-    <div class="list">${s.subj.map((x,i)=>`<div class="li"><span class="mk na"></span><div class="body">${subjTag(x.name)}<div class="kv"><span>正答率 <b>${pct(x.acc)}</b> / ${pct(M.subjAll[i].acc)}</span><span>時間 <b>${sec(x.t)}</b> / ${sec(M.subjAll[i].t)}</span></div></div><span class="side">${x.n}問</span></div>`).join("")}</div></section>
+    <div class="list">${s.subj.map((x,i)=>`<div class="li"><span class="mk na"></span><div class="body">${subjTag(x.name)}<div class="kv"><span>正答率 <b>${pct(x.acc)}</b> / ${pct(M.subjAll[i].acc)}</span><span>わからない <b>${pct(x.un)}</b> / ${pct(M.subjAll[i].un)}</span><span>時間 <b>${sec(x.t)}</b> / ${sec(M.subjAll[i].t)}</span></div></div><span class="side">${x.n}問</span></div>`).join("")}</div></section>
   <section class="sheet"><h2>指導の優先順位（学習ポイント別・正答率が低い順）</h2>
-    <div class="list">${weak.map((p,i)=>`<div class="li"><span class="rank">${i+1}</span><div class="body"><div class="tags">${subjTag(p.q.subject)}</div><b>${esc(p.q.point_code)} ${esc(p.q.point_title)}</b><span class="muted">${esc(p.q.unit)}</span></div><span class="side">${pct(p.acc)}<br>${sec(p.t)}</span></div>`).join("")}</div></section>`;
+    <div class="list">${weak.map((p,i)=>`<div class="li"><span class="rank">${i+1}</span><div class="body"><div class="tags">${subjTag(p.q.subject)}</div><b>${esc(p.q.point_code)} ${esc(p.q.point_title)}</b><span class="muted">${esc(p.q.unit)}</span>${kind(p)}</div><span class="side">${pct(p.acc)}<br>${sec(p.t)}</span></div>`).join("")}</div></section>`;
   $("#back").addEventListener("click",()=>{S.student=null;render()});
 }
 function downloadCsv(TD){
@@ -622,7 +628,7 @@ function downloadCsv(TD){
   const head=["ニックネーム","お名前","メールアドレス","受験ID","問題ID","科目","回","学習ポイント","難易度","解答","正誤","解答時間(秒)","解答日時"];
   const cell=v=>{const s=String(v??"");return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
   const lines=[head.join(",")].concat(TD.answers.map(a=>{const m=mm[a.uid]||{},q=S.QMAP[a.qid]||{};
-    return [m.nickname,m.full_name,m.email,a.eid,a.qid,q.subject,q.unit,(q.point_code||"")+" "+(q.point_title||""),q.level,a.choice?"○":"×",a.correct?"正解":"不正解",(a.ms/1000).toFixed(1),a.at?new Date(a.at).toLocaleString("ja-JP"):""].map(cell).join(",")}));
+    return [m.nickname,m.full_name,m.email,a.eid,a.qid,q.subject,q.unit,(q.point_code||"")+" "+(q.point_title||""),q.level,choiceLabel(a.choice),a.correct?"正解":"不正解",(a.ms/1000).toFixed(1),a.at?new Date(a.at).toLocaleString("ja-JP"):""].map(cell).join(",")}));
   const blob=new Blob(["﻿"+lines.join("\n")],{type:"text/csv"});
   const url=URL.createObjectURL(blob),a=document.createElement("a");
   a.href=url;a.download=`cma-level2-answers-${new Date().toISOString().slice(0,10)}.csv`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);

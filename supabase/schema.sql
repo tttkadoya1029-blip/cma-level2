@@ -48,7 +48,7 @@ create table if not exists public.l2_answers (
   exam_id     uuid not null references public.l2_exams(id) on delete cascade,
   user_id     uuid not null references public.l2_members(id) on delete cascade,
   question_id text not null references public.l2_questions(id),
-  choice      boolean not null,
+  choice      boolean,                    -- true=○ false=× null=わからない
   is_correct  boolean not null,
   time_ms     int not null check (time_ms >= 0),
   answered_at timestamptz not null default now(),
@@ -61,6 +61,9 @@ create table if not exists public.l2_exam_questions (
   position    int  not null,
   primary key (exam_id, question_id)
 );
+
+-- 3択（○・×・わからない）対応：わからない = choice が null
+alter table public.l2_answers alter column choice drop not null;
 
 create index if not exists l2_answers_user_idx on public.l2_answers(user_id);
 create index if not exists l2_answers_question_idx on public.l2_answers(question_id);
@@ -76,7 +79,7 @@ $$;
 -- p_subject: null なら全科目。p_include_hard: 難問も出すか。p_limit: 問題数（null なら範囲内の全問）
 drop function if exists public.l2_start_exam(text, boolean);
 drop function if exists public.l2_start_exam(text, boolean, int);
-create or replace function public.l2_start_exam(p_subject text, p_include_hard boolean, p_limit int default null)
+create or replace function public.l2_start_exam(p_subject text, p_include_hard boolean default true, p_limit int default null)
 returns table(exam_id uuid, id text, subject text, unit text, point_code text, point_title text, level text, stem text)
 language plpgsql security definer set search_path = public as $$
 declare v_exam uuid; v_pool int; v_count int;
@@ -119,7 +122,7 @@ begin
    where eq.exam_id = p_exam and eq.question_id = p_question;
   if not found then raise exception 'この問題はこの受験で出題されていません'; end if;
   insert into public.l2_answers(exam_id, user_id, question_id, choice, is_correct, time_ms)
-  values (p_exam, auth.uid(), p_question, p_choice, p_choice = v_ans, greatest(0, least(p_time_ms, 3600000)))
+  values (p_exam, auth.uid(), p_question, p_choice, coalesce(p_choice = v_ans, false), greatest(0, least(p_time_ms, 3600000)))  -- わからない(null)は不正解
   on conflict (exam_id, question_id) do nothing;   -- 二重送信は最初の1回だけ有効
   return true;
 end $$;
@@ -166,10 +169,11 @@ $$;
 -- ---------- みんなの成績（集計値のみ。時間は中央値、5分超は除外） ----------
 drop function if exists public.l2_question_stats();
 create or replace function public.l2_question_stats()
-returns table(question_id text, n bigint, accuracy numeric, median_ms numeric)
+returns table(question_id text, n bigint, accuracy numeric, median_ms numeric, unsure_rate numeric)
 language sql stable security definer set search_path = public as $$
   select a.question_id, count(*), round(avg(a.is_correct::int)::numeric, 4),
-         round((percentile_cont(0.5) within group (order by a.time_ms) filter (where a.time_ms <= 300000))::numeric)
+         round((percentile_cont(0.5) within group (order by a.time_ms) filter (where a.time_ms <= 300000))::numeric),
+         round(avg((a.choice is null)::int)::numeric, 4)
   from public.l2_answers a where auth.uid() is not null group by a.question_id;
 $$;
 
