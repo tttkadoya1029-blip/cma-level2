@@ -57,7 +57,7 @@ p{margin:0}
 .btn:focus-visible,.tab:focus-visible,.mark:focus-visible,input:focus-visible,select:focus-visible,.linkbtn:focus-visible,.li.click:focus-visible,.seg button:focus-visible,.toggle:focus-within{outline:3px solid var(--accent);outline-offset:2px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .row.end{justify-content:flex-end} .row.between{justify-content:space-between}
-input[type=text],input[type=email],input[type=password]{font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--rule);border-radius:8px;background:var(--paper);color:var(--ink);min-width:0;width:100%}
+input[type=text],input[type=email],input[type=password],input[type=number]{font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--rule);border-radius:8px;background:var(--paper);color:var(--ink);min-width:0;width:100%}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink-2)}
 label.f small{font-size:12px}
 .auth{max-width:440px;width:100%;margin:0 auto}
@@ -80,6 +80,12 @@ label.f small{font-size:12px}
 .toggle input{width:22px;height:22px;flex:none;accent-color:var(--hard)}
 .toggle .t{display:flex;flex-direction:column;min-width:0}
 .toggle .t b{font-size:15px}
+.seg.five{grid-template-columns:repeat(5,1fr)}
+@media (max-width:480px){.seg.five{grid-template-columns:repeat(4,1fr)}.seg.five button[data-count="all"]{grid-column:1 / -1;min-height:44px}.seg.five button[data-count="all"] small{display:inline;margin-left:6px}}
+.seg button:disabled{color:var(--ink-2);opacity:.45;cursor:default}
+.custom{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-2);flex-wrap:wrap}
+.custom span{white-space:nowrap}
+.custom input{width:96px!important;flex:none;text-align:right;font-family:var(--f-mono)}
 .summary{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:14px;color:var(--ink-2)}
 .summary b{font-family:var(--f-mono);color:var(--ink);font-size:18px}
 /* 出題 */
@@ -159,7 +165,7 @@ const OUTLIER_MS=300000; // 5分超は離席とみなし時間の集計から除
 const SUBJECTS=[{name:"市場と経済の分析",short:"経済",cls:"eco"},{name:"コーポレート・ファイナンス",short:"CF",cls:"cf"},{name:"財務分析",short:"財務",cls:"fa"}];
 const subjCls=n=>SUBJECTS.find(s=>s.name===n)?.cls||"eco";
 const S={sb:null,session:null,member:null,qlist:[],QMAP:{},qstats:{},myExams:[],myAnswers:[],
-  view:"home",pick:{subject:null,hard:false},exam:null,result:null,review:null,error:"",authMode:"login",authMsg:"",
+  view:"home",pick:{subject:null,hard:false,count:20},exam:null,result:null,review:null,error:"",authMode:"login",authMsg:"",
   teacherData:null,teacherLoading:false,sample:false,student:null,editProfile:false};
 const $=s=>document.querySelector(s), app=$("#app");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -328,11 +334,14 @@ function renderProfile(){
 
 /* ===== 挑戦する（開始画面） ===== */
 function poolFor(subject,hard){return S.qlist.filter(q=>(!subject||q.subject===subject)&&(hard||q.level==="標準"))}
+const PRESETS=[10,20,30,50];
+const examCount=()=>{const pool=poolFor(S.pick.subject,S.pick.hard).length;return S.pick.count==null?pool:Math.min(S.pick.count,pool)};
 function renderHome(){
   const p=S.pick,pool=poolFor(p.subject,p.hard),nHard=pool.filter(q=>q.level==="難問").length,nStd=pool.length-nHard;
   const hardAvail=poolFor(p.subject,true).filter(q=>q.level==="難問").length;
   const myMed=medT(S.myAnswers)||40000;
   const cnt=s=>poolFor(s,p.hard).length;
+  const n=examCount(),isPreset=p.count==null||PRESETS.includes(p.count);
   app.innerHTML=`<section class="sheet">
     <h1>本番モードで挑戦</h1>
     <p class="muted">1問ごとに解答時間を計り、正誤と解説は最後にまとめて表示します。途中でやめて、そこまでを採点することもできます。</p>
@@ -344,13 +353,21 @@ function renderHome(){
     </div>
     <label class="toggle"><input type="checkbox" id="hard" ${p.hard?"checked":""}>
       <span class="t"><b>難問にも挑戦する</b><span class="muted">計算問題や細かい論点を含む難しめの問題を ${hardAvail}問 追加します</span></span></label>
-    <div class="summary"><span>出題 <b>${pool.length}</b>問</span><span>標準 ${nStd}問${p.hard?`・難問 ${nHard}問`:""}</span><span>目安 約<b>${Math.max(1,Math.round(pool.length*myMed/60000))}</b>分</span></div>
-    <button class="btn accent wide" id="start" ${pool.length?"":"disabled"}>開始する</button>
+    <h3>問題数を選ぶ</h3>
+    <div class="seg five" role="group" aria-label="問題数">
+      ${PRESETS.map(k=>`<button data-count="${k}" aria-pressed="${p.count===k}" ${k>pool.length?"disabled":""}>${k}問</button>`).join("")}
+      <button data-count="all" aria-pressed="${p.count==null}">すべて<small>${pool.length}問</small></button>
+    </div>
+    <label class="custom"><span>自由に指定</span><input type="number" id="cnum" inputmode="numeric" min="1" max="${pool.length}" step="1" value="${isPreset?"":p.count}" placeholder="例 15"><span>問（1〜${pool.length}問）</span></label>
+    <div class="summary"><span>出題 <b>${n}</b>問</span><span>${n<pool.length?`${pool.length}問（標準${nStd}${p.hard?`・難問${nHard}`:""}）から抽選`:`標準${nStd}問${p.hard?`・難問${nHard}問`:""}`}</span><span>目安 約<b>${Math.max(1,Math.round(n*myMed/60000))}</b>分</span></div>
+    <button class="btn accent wide" id="start" ${n?"":"disabled"}>${n}問で開始する</button>
   </section>
   ${S.myExams.length?`<section class="sheet"><div class="row between"><h2>最近の結果</h2><button class="linkbtn" id="more">すべて見る</button></div>
     <div class="list">${S.myExams.slice(0,3).map(examRow).join("")}</div></section>`:""}`;
   document.querySelectorAll("[data-subj]").forEach(b=>b.addEventListener("click",()=>{S.pick.subject=b.dataset.subj||null;renderHome()}));
   $("#hard").addEventListener("change",e=>{S.pick.hard=e.target.checked;renderHome()});
+  document.querySelectorAll("[data-count]").forEach(b=>b.addEventListener("click",()=>{S.pick.count=b.dataset.count==="all"?null:+b.dataset.count;renderHome()}));
+  $("#cnum").addEventListener("change",e=>{const v=Math.floor(+e.target.value);if(v>=1){S.pick.count=Math.min(v,pool.length)}renderHome()});
   $("#start").addEventListener("click",startExam);
   $("#more")?.addEventListener("click",()=>{setTab("history");render()});
   bindExamRows();
@@ -359,7 +376,7 @@ function examRow(e){
   const a=S.myAnswers.filter(x=>x.eid===e.id),c=a.filter(x=>x.correct).length;
   return `<div class="li click" tabindex="0" data-exam="${esc(e.id)}"><span class="rank">${a.length?Math.round(c/a.length*100):"—"}<small style="font-size:11px">%</small></span>
     <div class="body"><div class="tags">${e.subject?subjTag(e.subject):`<span class="muted">全科目</span>`}${e.include_hard?`<span class="hard">難問あり</span>`:""}</div>
-    <div class="kv"><span>${fmtDate(e.started_at)}</span><span>正解 <b>${c}/${a.length}</b>${a.length<e.question_count?`（${e.question_count}問中）`:""}</span><span>時間 <b>${sec(medT(a))}</b></span></div></div>
+    <div class="kv"><span>${fmtDate(e.started_at)}</span><span>${e.question_count}問</span><span>正解 <b>${c}/${a.length}</b>${a.length<e.question_count?`（途中終了）`:""}</span><span>時間 <b>${sec(medT(a))}</b></span></div></div>
     <span class="side">›</span></div>`;
 }
 function bindExamRows(){
@@ -370,7 +387,7 @@ function bindExamRows(){
 let tick=null;
 async function startExam(){
   $("#start").disabled=true;S.error="";
-  const {data,error}=await S.sb.rpc("l2_start_exam",{p_subject:S.pick.subject,p_include_hard:S.pick.hard});
+  const {data,error}=await S.sb.rpc("l2_start_exam",{p_subject:S.pick.subject,p_include_hard:S.pick.hard,p_limit:S.pick.count});
   if(error||!data?.length){S.error="開始できませんでした："+(error?.message||"問題がありません");render();return}
   S.exam={id:data[0].exam_id,qs:data,i:0,answers:[],queue:Promise.resolve(),failed:[],paused:0,hiddenAt:null,t0:0,locked:false,confirm:false};
   S.result=null;render();showQ();window.scrollTo(0,0);
@@ -433,7 +450,7 @@ async function finishExam(){
   }
   const {data,error}=await S.sb.rpc("l2_finish_exam",{p_exam:x.id});
   if(error){app.innerHTML=`<section class="sheet"><h2>採点できませんでした</h2><p class="muted">${esc(error.message)}</p><button class="btn accent" id="retry">もう一度</button></section>`;$("#retry").addEventListener("click",finishExam);return}
-  S.result={examId:x.id,subject:S.pick.subject,hard:S.pick.hard,total:x.qs.length,rows:data.map(r=>({qid:r.question_id,choice:r.choice,correct:r.is_correct,ms:r.time_ms,answer:r.answer,exp:r.explanation})),filter:"all",fromHistory:false};
+  S.result={examId:x.id,subject:S.pick.subject,hard:S.pick.hard,count:S.pick.count,total:x.qs.length,rows:data.map(r=>({qid:r.question_id,choice:r.choice,correct:r.is_correct,ms:r.time_ms,answer:r.answer,exp:r.explanation})),filter:"all",fromHistory:false};
   S.exam=null;
   await Promise.all([loadMine(),loadStats()]);S.teacherData=null;
   render();window.scrollTo(0,0);
@@ -479,7 +496,7 @@ function renderResult(){
   </section>`;
   $("#home")?.addEventListener("click",()=>{S.result=null;setTab("home");render();window.scrollTo(0,0)});
   $("#back")?.addEventListener("click",()=>{S.result=null;render();window.scrollTo(0,0)});
-  $("#again").addEventListener("click",()=>{S.pick={subject:R.subject||null,hard:!!R.hard};S.result=null;setTab("home");render();startExam()});
+  $("#again").addEventListener("click",()=>{S.pick={subject:R.subject||null,hard:!!R.hard,count:R.count!==undefined?R.count:R.total};S.result=null;setTab("home");render();startExam()});
   document.querySelectorAll("[data-f]").forEach(b=>b.addEventListener("click",()=>{S.result.filter=b.dataset.f;renderResult()}));
 }
 

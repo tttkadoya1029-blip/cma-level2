@@ -54,6 +54,14 @@ create table if not exists public.l2_answers (
   answered_at timestamptz not null default now(),
   unique (exam_id, question_id)
 );
+-- ---------- 受験ごとに出題した問題（解答できるのはこの問題だけ） ----------
+create table if not exists public.l2_exam_questions (
+  exam_id     uuid not null references public.l2_exams(id) on delete cascade,
+  question_id text not null references public.l2_questions(id),
+  position    int  not null,
+  primary key (exam_id, question_id)
+);
+
 create index if not exists l2_answers_user_idx on public.l2_answers(user_id);
 create index if not exists l2_answers_question_idx on public.l2_answers(question_id);
 create index if not exists l2_exams_user_idx on public.l2_exams(user_id);
@@ -65,27 +73,35 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- ---------- 受験を始める（正答は返さない） ----------
--- p_subject: null なら全科目。p_include_hard: 難問も出すか
+-- p_subject: null なら全科目。p_include_hard: 難問も出すか。p_limit: 問題数（null なら範囲内の全問）
 drop function if exists public.l2_start_exam(text, boolean);
-create or replace function public.l2_start_exam(p_subject text, p_include_hard boolean)
+drop function if exists public.l2_start_exam(text, boolean, int);
+create or replace function public.l2_start_exam(p_subject text, p_include_hard boolean, p_limit int default null)
 returns table(exam_id uuid, id text, subject text, unit text, point_code text, point_title text, level text, stem text)
 language plpgsql security definer set search_path = public as $$
-declare v_exam uuid; v_count int;
+declare v_exam uuid; v_pool int; v_count int;
 begin
   if auth.uid() is null then raise exception 'ログインが必要です'; end if;
   if not exists (select 1 from public.l2_members m where m.id = auth.uid()) then
     raise exception '会員登録が済んでいません';
   end if;
-  select count(*) into v_count from public.l2_questions q
-   where q.active and (p_subject is null or q.subject = p_subject) and (p_include_hard or q.level = '標準');
-  if v_count = 0 then raise exception '出題できる問題がありません'; end if;
+  if p_limit is not null and p_limit < 1 then raise exception '問題数は1問以上にしてください'; end if;
+  select count(*) into v_pool from public.l2_questions q
+   where q.active and (p_subject is null or q.subject = p_subject) and (coalesce(p_include_hard,false) or q.level = '標準');
+  if v_pool = 0 then raise exception '出題できる問題がありません'; end if;
+  v_count := least(v_pool, coalesce(p_limit, v_pool));
   insert into public.l2_exams(user_id, subject, include_hard, question_count)
   values (auth.uid(), p_subject, coalesce(p_include_hard,false), v_count) returning l2_exams.id into v_exam;
+  -- 範囲内からランダムに v_count 問を選んで記録
+  insert into public.l2_exam_questions(exam_id, question_id, position)
+  select v_exam, x.id, row_number() over ()
+  from (select q.id from public.l2_questions q
+        where q.active and (p_subject is null or q.subject = p_subject) and (coalesce(p_include_hard,false) or q.level = '標準')
+        order by random() limit v_count) x;
   return query
     select v_exam, q.id, q.subject, q.unit, q.point_code, q.point_title, q.level, q.stem
-    from public.l2_questions q
-    where q.active and (p_subject is null or q.subject = p_subject) and (p_include_hard or q.level = '標準')
-    order by random();
+    from public.l2_exam_questions eq join public.l2_questions q on q.id = eq.question_id
+    where eq.exam_id = v_exam order by eq.position;
 end $$;
 
 -- ---------- 1問ごとの解答（採点はサーバー側。結果は受験終了まで返さない） ----------
@@ -98,11 +114,10 @@ begin
   if not exists (select 1 from public.l2_exams e where e.id = p_exam and e.user_id = auth.uid() and e.finished_at is null) then
     raise exception 'この受験には解答できません';
   end if;
-  select q.answer into v_ans from public.l2_questions q
-   join public.l2_exams e on e.id = p_exam
-   where q.id = p_question and q.active
-     and (e.subject is null or q.subject = e.subject) and (e.include_hard or q.level = '標準');
-  if not found then raise exception 'この問題は出題範囲外です'; end if;
+  select q.answer into v_ans from public.l2_exam_questions eq
+   join public.l2_questions q on q.id = eq.question_id
+   where eq.exam_id = p_exam and eq.question_id = p_question;
+  if not found then raise exception 'この問題はこの受験で出題されていません'; end if;
   insert into public.l2_answers(exam_id, user_id, question_id, choice, is_correct, time_ms)
   values (p_exam, auth.uid(), p_question, p_choice, p_choice = v_ans, greatest(0, least(p_time_ms, 3600000)))
   on conflict (exam_id, question_id) do nothing;   -- 二重送信は最初の1回だけ有効
@@ -163,6 +178,7 @@ alter table public.l2_members   enable row level security;
 alter table public.l2_questions enable row level security;
 alter table public.l2_exams     enable row level security;
 alter table public.l2_answers   enable row level security;
+alter table public.l2_exam_questions enable row level security;
 
 drop policy if exists "l2_members: 本人か講師が読める" on public.l2_members;
 create policy "l2_members: 本人か講師が読める" on public.l2_members for select
@@ -185,6 +201,9 @@ create policy "l2_questions: 講師が全操作" on public.l2_questions for all
 drop policy if exists "l2_exams: 本人か講師が読める" on public.l2_exams;
 create policy "l2_exams: 本人か講師が読める" on public.l2_exams for select
   using (user_id = auth.uid() or public.l2_is_teacher());
+drop policy if exists "l2_exam_questions: 本人か講師が読める" on public.l2_exam_questions;
+create policy "l2_exam_questions: 本人か講師が読める" on public.l2_exam_questions for select
+  using (exists (select 1 from public.l2_exams e where e.id = exam_id and e.user_id = auth.uid()) or public.l2_is_teacher());
 drop policy if exists "l2_answers: 本人か講師が読める" on public.l2_answers;
 -- 本人は「終了した受験」の解答だけ読める（受験中に正誤を盗み見できないように）
 create policy "l2_answers: 本人か講師が読める" on public.l2_answers for select
@@ -192,13 +211,13 @@ create policy "l2_answers: 本人か講師が読める" on public.l2_answers for
          or public.l2_is_teacher());
 
 -- ---------- 関数の実行権限 ----------
-revoke execute on function public.l2_start_exam(text, boolean)              from anon, public;
+revoke execute on function public.l2_start_exam(text, boolean, int)         from anon, public;
 revoke execute on function public.l2_submit_answer(uuid, text, boolean, int) from anon, public;
 revoke execute on function public.l2_finish_exam(uuid)                      from anon, public;
 revoke execute on function public.l2_review(uuid)                           from anon, public;
 revoke execute on function public.l2_question_list()                        from anon, public;
 revoke execute on function public.l2_question_stats()                       from anon, public;
-grant  execute on function public.l2_start_exam(text, boolean)              to authenticated;
+grant  execute on function public.l2_start_exam(text, boolean, int)         to authenticated;
 grant  execute on function public.l2_submit_answer(uuid, text, boolean, int) to authenticated;
 grant  execute on function public.l2_finish_exam(uuid)                      to authenticated;
 grant  execute on function public.l2_review(uuid)                           to authenticated;

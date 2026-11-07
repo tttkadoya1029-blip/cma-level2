@@ -32,7 +32,8 @@ window.supabase={createClient:()=>({
     if(name==="l2_question_list")return {data:QS.map(strip),error:null};
     if(name==="l2_question_stats"){const g={};db.l2_answers.forEach(x=>{(g[x.question_id]=g[x.question_id]||[]).push(x)});
       return {data:Object.entries(g).map(([k,v])=>({question_id:k,n:v.length,accuracy:v.filter(x=>x.is_correct).length/v.length,median_ms:v[v.length>>1].time_ms})),error:null}}
-    if(name==="l2_start_exam"){const pool=QS.filter(q=>(!a.p_subject||q.subject===a.p_subject)&&(a.p_include_hard||q.level==="標準"));
+    if(name==="l2_start_exam"){const all=QS.filter(q=>(!a.p_subject||q.subject===a.p_subject)&&(a.p_include_hard||q.level==="標準"));
+      const pool=all.map(q=>[Math.random(),q]).sort((x,y)=>x[0]-y[0]).map(x=>x[1]).slice(0,a.p_limit==null?all.length:a.p_limit);
       cur={id:"ex"+(seq++),user_id:uid,subject:a.p_subject,include_hard:a.p_include_hard,question_count:pool.length,started_at:iso(Date.now()),finished_at:null};db.l2_exams.unshift(cur);
       return {data:pool.map(q=>({exam_id:cur.id,...strip(q)})),error:null}}
     if(name==="l2_submit_answer"){const q=QS.find(x=>x.id===a.p_question);

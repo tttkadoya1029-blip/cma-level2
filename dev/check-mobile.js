@@ -44,7 +44,15 @@ const URL_=`http://localhost:${server.address().port}/`;
         await shot("02-register");
         await page.fill("#nick","テスト受講者（長めのニックネーム）");await page.click("#psub");await page.waitForTimeout(300);
         await shot("03-home");
-        await page.click('[data-subj="財務分析"]');await page.click("#hard");await page.waitForTimeout(150);await shot("04-home-pick");
+        await page.click('[data-subj="財務分析"]');await page.click("#hard");await page.click('[data-count="10"]');await page.waitForTimeout(150);await shot("04-home-pick");
+        await page.fill("#cnum","15");await page.press("#cnum","Enter");await page.locator("#cnum").blur();await page.waitForTimeout(150);
+        const label=await page.textContent("#start");if(!label.includes("15問"))problems.push(`[${vp.name}] 好きな数を入力しても問題数が変わりません: ${label}`);
+        await shot("04b-home-custom");
+        await page.click("#start");await page.waitForTimeout(300);
+        const total=await page.textContent(".qno");if(!/\/ 15/.test(total))problems.push(`[${vp.name}] 出題数が15問になっていません: ${total}`);
+        await page.click("#stop");await page.click("#stopYes").catch(()=>{});await page.waitForTimeout(300);
+        await page.click("#home").catch(()=>{});await page.waitForTimeout(200);
+        await page.click('[data-count="all"]');await page.waitForTimeout(100);
         await page.click("#start");await page.waitForTimeout(400);await shot("05-question");
         for(let i=0;i<4;i++){await page.click(i%2?"#ans-false":"#ans-true");await page.waitForTimeout(120)}
         await page.click("#stop");await page.waitForTimeout(150);await shot("06-stop-confirm");
