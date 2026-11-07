@@ -1,10 +1,10 @@
 # CMA 2次 正誤チャレンジ — 作業ルール
 
 証券アナリスト第2次レベルの正誤問題アプリ（本番モードのみ）。静的HTML（index.html）＋ Supabase、GitHub → Vercel で自動公開。
-既存アプリ「CMA正誤トレーナー」（tttkadoya1029-blip/CMA）と同じSupabaseプロジェクトを使い、テーブルは `l2_` で始まるものだけを使う。
+専用のSupabaseプロジェクト（jmwshxdrxzvgsswupamx）を使う。テーブル名は `l2_` で始める（前のアプリ「CMA正誤トレーナー」とは別プロジェクト）。
 
 ## 構成
-- `index.html` … 画面とロジックすべて（ビルドなし）。`config.js` … Supabase接続情報（anon keyのみ。公開してよい）
+- `index.html` … 画面とロジックすべて（ビルドなし）。`config.js` … Supabase接続情報（publishable keyのみ。公開してよい。secret/service_roleキーは絶対に置かない）
 - `tools/questions.py` … **問題の原本**（100問）。直したら `python3 tools/build_seed.py` で `supabase/seed.sql` と `tools/questions.json` を作り直す
 - `supabase/schema.sql` … テーブル・RLS・関数。何度実行しても壊れないように書く
 - `dev/` … 表示確認用（にせSupabaseとスクリーンショットスクリプト）。Vercelには上げない

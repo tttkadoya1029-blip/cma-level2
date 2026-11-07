@@ -19,17 +19,19 @@
 
 標準64問（○32・×32）、難問36問（○18・×18）。問題文はすべてオリジナルで、テキスト（2025年度版）の本文と照合して作成しています。
 
-## セットアップ（既存アプリと同じSupabaseを使う場合：10分ほど）
+## セットアップ（専用のSupabaseプロジェクト：jmwshxdrxzvgsswupamx）
+`config.js` には接続情報（プロジェクトURLと publishable key）が入っています。publishable key は公開して問題ない鍵です。
+
 1. Supabase の **SQL Editor** で `supabase/schema.sql` を実行し、続けて `supabase/seed.sql` を実行（100問が入ります）
-2. Supabase の **Authentication → URL Configuration → Redirect URLs** に、このアプリの Vercel のURLを追加
+2. **Authentication → Sign In / Providers → Email** で「Confirm email」をオフ（標準のメール送信は1時間に数通までのため）
 3. Vercel で「Add New → Project」からこのリポジトリを Import → Deploy
-4. 公開URLで一度ログインして会員登録したあと、SQL Editor で自分を講師にする：
+4. **Authentication → URL Configuration** の Site URL と Redirect URLs に、Vercel のURLを入力
+5. Googleログインを使う場合：このプロジェクトの **Authentication → Sign In / Providers → Google** にクライアントIDとシークレットを入力し、
+   Google Cloud 側の「承認済みのリダイレクトURI」に `https://jmwshxdrxzvgsswupamx.supabase.co/auth/v1/callback` を追加
+6. 公開URLで一度ログインして会員登録したあと、SQL Editor で自分を講師にする：
    ```sql
    update public.l2_members set role = 'teacher' where email = 'あなたのメールアドレス';
    ```
-
-`config.js` には既存アプリと同じ Supabase の接続情報が入っています（anon key は公開して問題ない鍵です）。
-ログインは既存アプリと共通なので、同じアカウントで両方のアプリを使えます。
 
 ## 問題を追加・修正するには
 `tools/questions.py` を編集して `python3 tools/build_seed.py` を実行し、できた `supabase/seed.sql` を SQL Editor で実行します。
